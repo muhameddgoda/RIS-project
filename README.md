@@ -102,6 +102,8 @@ Duckiebot-luna-ros/
 │   ├── tag-action.sh
 │   └── combined.sh
 └── packages/
+│ ├── apriltag_ros/ ← Fork or clone of AprilRobotics/apriltag_ros
+│ ├── apriltag_detector/ ← Fork or clone of ros-misc-utilities/apriltag_detector
     └── my_package/
         ├── CMakeLists.txt
         ├── package.xml
