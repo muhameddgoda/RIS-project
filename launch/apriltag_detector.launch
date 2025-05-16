@@ -1,0 +1,14 @@
+<launch>
+  <!-- If you installed ros-melodic-apriltag-detector via apt,
+       this will launch the upstream detector: -->
+  <node pkg="apriltag_detector" type="apriltag_node"
+        name="apriltag_node" output="screen">
+    <remap from="image_rect" to="/motoduck/camera_node/image_raw"/>
+    <remap from="camera_info" to="/motoduck/camera_node/camera_info"/>
+    <param name="families" value="tag36h11"/>
+  </node>
+
+  <!-- Your custom Python wrapper to publish detection arrays -->
+  <node pkg="my_package" type="apriltag_detector_node.py"
+        name="apriltag_detector_node" output="screen"/>
+</launch>

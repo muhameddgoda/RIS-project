@@ -1,0 +1,9 @@
+# System libs
+libapriltag-dev
+python3-opencv
+
+# ROS packages needed by apriltag_ros
+ros-noetic-image-geometry
+
+# Teleop for keyboard control
+ros-noetic-teleop-twist-keyboard

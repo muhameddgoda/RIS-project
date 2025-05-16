@@ -1,0 +1,11 @@
+<launch>
+  <!-- start line follower -->
+  <include file="$(find my_package)/launch/line_follower.launch"/>
+
+  <!-- start AprilTag detector -->
+  <include file="$(find my_package)/launch/apriltag_detector.launch"/>
+
+  <!-- Taking actions -->
+  <include file="$(find my_package)/launch/tag_action.launch"/>
+
+</launch>

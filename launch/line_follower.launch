@@ -1,0 +1,12 @@
+<launch>
+  <node pkg="my_package" type="white_line_follower_node.py"
+        name="white_line_follower" output="screen">
+    <!-- tune these params as needed -->
+    <param name="hsv_lower" value="[0,0,200]" />
+    <param name="hsv_upper" value="[180,30,255]" />
+    <param name="crop_height" value="100" />
+    <param name="forward_speed" value="0.2" />
+    <param name="k_p" value="0.005" />
+    <param name="desired_frac" value="0.8" />
+  </node>
+</launch>

@@ -1,0 +1,9 @@
+<launch>
+  <node pkg="my_package" type="tag_action_node.py"
+        name="tag_action" output="screen">
+    <!-- map tag IDs to actions -->
+    <param name="tag_actions" value="{0:'stop',1:'go',2:'left',3:'right'}"/>
+    <param name="forward_speed" value="0.2"/>
+    <param name="turn_speed"    value="0.5"/>
+  </node>
+</launch>
