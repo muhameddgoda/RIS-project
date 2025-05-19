@@ -1,130 +1,125 @@
-# Duckiebot Line Follower & AprilTag Behaviors
+# %% [markdown]
+# Training YOLOv8 and RF-DETR on the Tirme Waste Dataset
 
-This repository contains a custom ROS 1 catkin package (`my_package`) for:
+This notebook sets up training for:
+1. **YOLOv8** with the RAdam optimizer and early stopping.
+2. **RF-DETR** with the RAdam optimizer (fixed epochs for now).
 
-- **White‐line following** (keep the bot to the left of a white guide line on its right)  
-- **AprilTag detection** (pure-Python detector)  
-- **Tag-action mapping** (stop/go/turn when a tag appears)  
-- **Combined launch** for driving + vision behaviors  
-
-All code runs inside the Duckietown Docker environment on your Duckiebot (e.g. `motoduck`).
-
----
-
-## 📋 Prerequisites
-
-1. A Duckiebot running the Duckietown template‐ros image (Noetic).  
-2. `dts` (Duckietown Shell) installed on your laptop.  
-3. A GitHub account & Git installed locally.  
-
----
-
-## 🛠️ Dependencies
-
-### 1. System packages (`dependencies-apt.txt`)
-
-```text
-libapriltag-dev
-python3-opencv
-ros-noetic-teleop-twist-keyboard
-````
-
-These are installed automatically when you rebuild the Docker image.
-
-### 2. Python packages (`dependencies-py3.txt`)
-
-```text
-apriltag
+Dataset structure:
 ```
+Datasets/tirme_segmentation.yolo.v2/
+  train/images
+  train/labels
+  valid/images
+  valid/labels
+```
+One class: `waste`.
 
-This is installed via `pip` inside the container.
+You can run each cell sequentially in a Jupyter environment.
 
----
-
-## 📦 Building the Workspace
-
-1. Ensure launcher scripts and Python nodes are executable:
-
-   ```bash
-   chmod +x launchers/*.sh
-   chmod +x packages/my_package/src/*.py
-   ```
-
-2. Build in the Duckiebot container:
-
-   ```bash
-   dts devel build -H motoduck
-   ```
-
----
-
-## 🚀 Running Your Nodes
-
-Use one of these Duckietown launchers:
-
-| Launcher            | Description                                                 |
-| ------------------- | ----------------------------------------------------------- |
-| `line-follower`     | Run the white‐line follower                                 |
-| `apriltag-detector` | Run the pure-Python AprilTag detector                       |
-| `tag-action`        | Map detected tag IDs → stop/go/turn behaviors               |
-| `combined`          | Run line follower + AprilTag detector + tag-action together |
-
-Example:
+# %% [markdown]
+## 1. Install dependencies
 
 ```bash
-dts devel run -H motoduck -L combined
-```
+!pip install ultralytics torch_optimizer detectron2 detrex pyyaml
+```  
 
----
+# %% [markdown]
+## 2. Prepare the YOLO data config
 
-## 🔧 ROS Launch Files
+Create a small YAML file pointing to your train/val folders and class name.
 
-Under `packages/my_package/launch/` you’ll find:
+# %%
+import yaml
 
-* `line_follower.launch`
-* `apriltag_detector.launch`
-* `tag_action.launch`
-* `combined.launch`
+data_cfg = {
+    'train': 'Datasets/tirme_segmentation.yolo.v2/train/images',
+    'val':   'Datasets/tirme_segmentation.yolo.v2/valid/images',
+    'nc':    1,
+    'names': ['waste']
+}
+with open('tirme_dataset.yaml', 'w') as f:
+    yaml.dump(data_cfg, f)
+print("Saved YOLO data config to 'tirme_dataset.yaml'")
 
-And in `launchers/` the corresponding shell scripts.
+# %% [markdown]
+## 3. Train YOLOv8 with RAdam & Early Stopping
 
----
+We use Ultralytics YOLOv8 Python API, swapping in RAdam and stopping if no val/mAP50 improvement for 10 epochs.
 
-## 🗂️ Repository Layout
+# %%
+from ultralytics import YOLO
+import torch_optimizer as optim
 
-```
-Duckiebot-luna-ros/
-├── dependencies-apt.txt
-├── dependencies-py3.txt
-├── launchers/
-│   ├── line-follower.sh
-│   ├── apriltag-detector.sh
-│   ├── tag-action.sh
-│   └── combined.sh
-└── packages/
-│   ├── apriltag_ros/ ← Fork or clone of AprilRobotics/apriltag_ros
-│   ├── apriltag_detector/ ← Fork or clone of ros-misc-utilities/apriltag_detector
-    └── my_package/
-        ├── CMakeLists.txt
-        ├── package.xml
-        ├── launch/
-        │   ├── line_follower.launch
-        │   ├── apriltag_detector.launch
-        │   ├── tag_action.launch
-        │   └── combined.launch
-        └── src/
-            ├── white_line_follower_node.py
-            ├── apriltag_detector_node.py
-            └── tag_action_node.py
-```
+# Load a pretrained YOLOv8s model
+model = YOLO('yolov8s.pt')
 
----
+# Override default optimizer to RAdam
+optimizer_cfg = {
+    'optimizer': optim.RAdam,
+    'lr0': 1e-3
+}
 
-## 📖 Further Improvements
+# Start training with early stopping (patience=10)
+metrics = model.train(
+    data='tirme_dataset.yaml',
+    epochs=100,
+    batch=16,
+    imgsz=640,
+    **optimizer_cfg,
+    patience=10,           # stop after 10 epochs with no mAP50 improvement
+    save=True              # save best weights
+)
 
-* PID control tuning via dynamic reconfigure
-* Overlay debug mask & centroid in RViz or OpenCV viewer (on your laptop)
-* Integration with Duckietown’s simulator for faster iteration
+print("YOLOv8 training completed.")
 
-Feel free to open issues or pull requests if you have ideas or fixes!
+# %% [markdown]
+## 4. Prepare RF-DETR with Detectron2 + Detrex
 
+We'll use Detrex's RF-DETR config under the hood, and Detectron2's trainer.
+
+**Note:** Early stopping for RF-DETR isn't built-in—in this initial setup we train for a fixed number of epochs (e.g. 50). You can add a similar hook later.
+
+# %%
+import os
+import torch_optimizer as optim
+from detectron2.config import get_cfg
+from detrex.config import get_rfdetr_cfg
+from detrex.engine import DefaultTrainer
+
+# Base DETR config
+cfg = get_cfg()
+cfg.merge_from_file(get_rfdetr_cfg('rf_detr_R_50_DC5_1x'))
+
+# Point to our dataset (you'll need to register these in Detectron2 beforehand)
+cfg.DATASETS.TRAIN = ('tirme_train',)
+cfg.DATASETS.TEST = ('tirme_valid',)
+
+# DataLoader and solver settings
+cfg.DATALOADER.NUM_WORKERS = 4
+cfg.SOLVER.IMS_PER_BATCH = 8
+cfg.SOLVER.BASE_LR = 1e-4
+cfg.SOLVER.MAX_EPOCH = 50       # fixed number of epochs
+tf
+
+# Override the optimizer builder to use RAdam with weight decay
+from detectron2.solver import build_optimizer as d2_build_opt
+import detectron2.solver
+
+def build_radam_optimizer(cfg, model):
+    params = [p for p in model.parameters() if p.requires_grad]
+    return optim.RAdam(params, lr=cfg.SOLVER.BASE_LR, weight_decay=cfg.SOLVER.WEIGHT_DECAY)
+
+detectron2.solver.build_optimizer = build_radam_optimizer
+
+# Create output directory
+os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
+
+# %% [markdown]
+## 5. Train RF-DETR
+
+# %%
+trainer = DefaultTrainer(cfg)
+trainer.resume_or_load(resume=False)
+trainer.train()
+print("RF-DETR training completed.")
