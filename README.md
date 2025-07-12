@@ -1,4 +1,3 @@
-# %% [markdown]
 # Training YOLOv8 and RF-DETR on the Tirme Waste Dataset
 
 This notebook sets up training for:
